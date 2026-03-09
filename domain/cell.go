@@ -21,6 +21,12 @@ type Cell struct {
 	Str  []byte
 }
 
+func NewCell(t CellType) Cell {
+	return Cell{
+		Type: t,
+	}
+}
+
 /*
  Strのformat
  | Length  | Data |
