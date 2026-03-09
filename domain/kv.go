@@ -56,22 +56,22 @@ func (kv *KV) SetEx(key []byte, val []byte, mode UpdateMode) (updated bool, err 
 	prev, exist := kv.mem[string(key)]
 	updated = !exist || !bytes.Equal(prev, val)
 	switch mode {
-	case ModeInsert: // if the key already exists, do not update and return false
-		if exist {
-			return false, nil
-		}
-	case ModeUpdate: // only update existing keys
-		if !exist {
-			return false, nil
-		}
 	case ModeUpsert: // same as the old Set(), insert or overwrite
+		updated = !exist || !bytes.Equal(prev, val)
+	case ModeInsert: // if the key already exists, do not update and return false
+		updated = !exist
+	case ModeUpdate: // only update existing keys
+		updated = !exist && !bytes.Equal(prev, val)
+	default:
+		panic("unreachable")
 	}
-
-	ent := NewPutEntry(key, val)
-	if err = kv.log.Write(ent); err != nil {
-		return false, err
+	if updated {
+		ent := NewPutEntry(key, val)
+		if err = kv.log.Write(ent); err != nil {
+			return false, err
+		}
+		kv.mem[string(key)] = val
 	}
-	kv.mem[string(key)] = val
 	return
 }
 
