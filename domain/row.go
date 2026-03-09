@@ -61,7 +61,7 @@ func (row Row) DecodeKey(schema *Schema, key []byte) (err error) {
 	}
 
 	// keyに含まれるテーブル名とschemaのテーブル名が一致するか検証
-	if schema.Table+"\x00" != string(key[tablePrefixLen]) {
+	if schema.Table+"\x00" != string(key[:tablePrefixLen]) {
 		return ErrTableMismatch
 	}
 
