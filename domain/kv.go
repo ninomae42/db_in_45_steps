@@ -43,17 +43,40 @@ func (kv *KV) Get(key []byte) (val []byte, ok bool, err error) {
 	}
 	return nil, false, nil
 }
-func (kv *KV) Set(key []byte, val []byte) (updated bool, err error) {
+
+type UpdateMode int
+
+const (
+	ModeUpsert UpdateMode = 0 // insert or update
+	ModeInsert UpdateMode = 1 // insert new
+	ModeUpdate UpdateMode = 2 // update existing
+)
+
+func (kv *KV) SetEx(key []byte, val []byte, mode UpdateMode) (updated bool, err error) {
 	prev, exist := kv.mem[string(key)]
 	updated = !exist || !bytes.Equal(prev, val)
-	if updated {
-		ent := NewPutEntry(key, val)
-		if err = kv.log.Write(ent); err != nil {
-			return false, err
+	switch mode {
+	case ModeInsert: // if the key already exists, do not update and return false
+		if exist {
+			return false, nil
 		}
-		kv.mem[string(key)] = val
+	case ModeUpdate: // only update existing keys
+		if !exist {
+			return false, nil
+		}
+	case ModeUpsert: // same as the old Set(), insert or overwrite
 	}
+
+	ent := NewPutEntry(key, val)
+	if err = kv.log.Write(ent); err != nil {
+		return false, err
+	}
+	kv.mem[string(key)] = val
 	return
+}
+
+func (kv *KV) Set(key []byte, val []byte) (updated bool, err error) {
+	return kv.SetEx(key, val, ModeUpsert)
 }
 
 func (kv *KV) Del(key []byte) (deleted bool, err error) {
