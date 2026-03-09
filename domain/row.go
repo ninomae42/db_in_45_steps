@@ -78,6 +78,11 @@ func (row Row) DecodeKey(schema *Schema, key []byte) (err error) {
 		}
 		row[idx] = cell
 	}
+
+	if len(key) != 0 {
+		return ErrExtraData
+	}
+
 	return nil
 }
 
