@@ -56,7 +56,9 @@ func (log *Log) Write(ent *Entry) error {
 
 func (log *Log) Read(ent *Entry) (eof bool, err error) {
 	err = ent.Decode(log.fp)
-	if errors.Is(err, io.EOF) {
+	if errors.Is(err, io.EOF) ||
+		errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, ErrBadCheckSum) {
 		return true, nil
 	} else if err != nil {
 		return false, err
