@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ninomae42/db_in_45_steps/helper"
 )
@@ -21,7 +22,8 @@ func NewParser(s string) Parser {
 /*
 * tryKeyword
 • Skip leading spaces.
-• Match the keyword, case-insensitive. On success, advance pos and return true.
+• Match the keyword, case-insensitive.
+• On success, advance pos and return true.
 • Otherwise, return false.
 • Keywords must be separated by space or punctuation.
 */
@@ -92,15 +94,21 @@ func (p *Parser) parseString(out *Cell) error {
 	pos += 1 // consume start enclose character
 
 	buf := bytes.Buffer{}
-	for pos < len(p.buf) && p.buf[pos] != encloseChar {
-		if p.buf[pos] == '\\' {
-			pos += 1
+	for pos < len(p.buf) {
+		r, size := utf8.DecodeRuneInString(p.buf[pos:])
+		if r == rune(encloseChar) {
+			break
+		}
+		if r == '\\' {
+			pos += size
 			if len(p.buf) <= pos {
 				return errors.New("incomplete escape sequence")
 			}
+			// re-interpret 1 character(not byte) after the escape sequence
+			r, size = utf8.DecodeRuneInString(p.buf[pos:])
 		}
-		buf.WriteByte(p.buf[pos])
-		pos += 1
+		buf.WriteRune(r)
+		pos += size
 	}
 
 	if len(p.buf) <= pos {
