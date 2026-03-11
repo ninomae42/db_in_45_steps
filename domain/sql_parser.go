@@ -22,20 +22,18 @@ func NewParser(s string) Parser {
 • Otherwise, return false.
 • Keywords must be separated by space or punctuation.
 */
-
 func (p *Parser) tryKeyword(kw string) bool {
-	p.skipSpaces()
 	if p.isEnd() {
 		return false
 	}
 
 	pos := p.pos
-	for !helper.IsSeparator(p.buf[pos]) {
+	for pos < len(p.buf) && !helper.IsSeparator(p.buf[pos]) {
 		pos += 1
 	}
 
 	word := p.buf[p.pos:pos]
-	if strings.ToLower(kw) != strings.ToLower(word) {
+	if !strings.EqualFold(kw, word) {
 		return false
 	}
 
@@ -51,7 +49,6 @@ func (p *Parser) tryKeyword(kw string) bool {
 • On failure, return false and keep pos.
 */
 func (p *Parser) tryName() (string, bool) {
-	p.skipSpaces()
 	if p.isEnd() {
 		return "", false
 	}
@@ -62,7 +59,7 @@ func (p *Parser) tryName() (string, bool) {
 	}
 	pos += 1
 
-	for helper.IsNameContinue(p.buf[pos]) {
+	for pos < len(p.buf) && helper.IsNameContinue(p.buf[pos]) {
 		pos += 1
 	}
 
