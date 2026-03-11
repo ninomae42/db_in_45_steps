@@ -95,18 +95,21 @@ func (p *Parser) parseString(out *Cell) error {
 	for pos < len(p.buf) && p.buf[pos] != encloseChar {
 		if p.buf[pos] == '\\' {
 			pos += 1
+			if len(p.buf) <= pos {
+				return errors.New("incomplete escape sequence")
+			}
 		}
 		buf.WriteByte(p.buf[pos])
 		pos += 1
 	}
 
-	if pos == len(p.buf) && p.buf[pos] != encloseChar {
+	if len(p.buf) <= pos {
 		return errors.New("unclosed string value")
 	}
 	pos += 1 // consume end enclose character
 
 	out.Type = TypeStr
-	out.Str = append(out.Str, buf.Bytes()...)
+	out.Str = append([]byte(nil), buf.Bytes()...) // ensure overwrite
 	p.pos = pos
 
 	return nil
@@ -114,18 +117,17 @@ func (p *Parser) parseString(out *Cell) error {
 
 func (p *Parser) parseInt(out *Cell) (err error) {
 	pos := p.pos
-	ch := p.buf[pos]
 	for pos < len(p.buf) &&
-		(ch == '+' || ch == '-' || helper.IsDigit(ch)) {
+		(p.buf[pos] == '+' || p.buf[pos] == '-' || helper.IsDigit(p.buf[pos])) {
 		pos += 1
-		ch = p.buf[pos]
 	}
 
-	out.I64, err = strconv.ParseInt(p.buf[p.pos:pos], 10, 64)
+	val, err := strconv.ParseInt(p.buf[p.pos:pos], 10, 64)
 	if err != nil {
 		return err
 	}
 	out.Type = TypeI64
+	out.I64 = val
 	p.pos = pos
 
 	return nil
