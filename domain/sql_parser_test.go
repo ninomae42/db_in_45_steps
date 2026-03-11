@@ -25,4 +25,19 @@ func TestParseKeyword(t *testing.T) {
 	assert.True(t, p.tryKeyword("hello") && p.isEnd())
 }
 
+func testParseValue(t *testing.T, s string, ref Cell) {
+	p := NewParser(s)
+	out := Cell{}
+	err := p.parseValue(&out)
+	assert.Nil(t, err)
+	assert.True(t, p.isEnd())
+	assert.Equal(t, ref, out)
+}
+
+func TestParseValue(t *testing.T) {
+	testParseValue(t, " -123 ", Cell{Type: TypeI64, I64: -123})
+	testParseValue(t, ` 'abc\'\"d' `, Cell{Type: TypeStr, Str: []byte("abc'\"d")})
+	testParseValue(t, ` "abc\'\"d" `, Cell{Type: TypeStr, Str: []byte("abc'\"d")})
+}
+
 // QzBQWVJJOUhU https://trialofcode.org/

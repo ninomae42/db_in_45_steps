@@ -1,6 +1,9 @@
 package domain
 
 import (
+	"bytes"
+	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/ninomae42/db_in_45_steps/helper"
@@ -66,6 +69,66 @@ func (p *Parser) tryName() (string, bool) {
 	s := p.buf[p.pos:pos]
 	p.pos = pos
 	return s, true
+}
+
+func (p *Parser) parseValue(out *Cell) error {
+	p.skipSpaces()
+	if p.pos >= len(p.buf) {
+		return errors.New("expect value")
+	}
+	ch := p.buf[p.pos]
+	if ch == '"' || ch == '\'' {
+		return p.parseString(out)
+	} else if helper.IsDigit(ch) || ch == '-' || ch == '+' {
+		return p.parseInt(out)
+	} else {
+		return errors.New("expect value")
+	}
+}
+
+func (p *Parser) parseString(out *Cell) error {
+	pos := p.pos
+	encloseChar := p.buf[p.pos]
+	pos += 1 // consume start enclose character
+
+	buf := bytes.Buffer{}
+	for pos < len(p.buf) && p.buf[pos] != encloseChar {
+		if p.buf[pos] == '\\' {
+			pos += 1
+		}
+		buf.WriteByte(p.buf[pos])
+		pos += 1
+	}
+
+	if pos == len(p.buf) && p.buf[pos] != encloseChar {
+		return errors.New("unclosed string value")
+	}
+	pos += 1 // consume end enclose character
+
+	out.Type = TypeStr
+	out.Str = append(out.Str, buf.Bytes()...)
+	p.pos = pos
+
+	return nil
+}
+
+func (p *Parser) parseInt(out *Cell) (err error) {
+	pos := p.pos
+	ch := p.buf[pos]
+	for pos < len(p.buf) &&
+		(ch == '+' || ch == '-' || helper.IsDigit(ch)) {
+		pos += 1
+		ch = p.buf[pos]
+	}
+
+	out.I64, err = strconv.ParseInt(p.buf[p.pos:pos], 10, 64)
+	if err != nil {
+		return err
+	}
+	out.Type = TypeI64
+	p.pos = pos
+
+	return nil
 }
 
 func (p *Parser) skipSpaces() {
