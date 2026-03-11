@@ -10,6 +10,20 @@ import (
 	"github.com/ninomae42/db_in_45_steps/helper"
 )
 
+var (
+	ErrIncompleteEscape = errors.New("incomplete escape sequence")
+	ErrUnclosedString   = errors.New("unclosed string value")
+	ErrExpectValue      = errors.New("expect value")
+	ErrExpectColumn     = errors.New("expect column name")
+	ErrExpectColumnList = errors.New("expect column list")
+	ErrExpectTable      = errors.New("expect table name")
+	ErrExpectEqual      = errors.New("expect '='")
+	ErrExpectComma      = errors.New("expect comma")
+	ErrExpectKeyword    = errors.New("expect keyword")
+	ErrExpectAND        = errors.New("expect AND")
+	ErrExpectWhere      = errors.New("expect where clause")
+)
+
 type Parser struct {
 	buf string
 	pos int
@@ -99,7 +113,7 @@ func (p *Parser) tryPunctuation(tok string) bool {
 func (p *Parser) parseValue(out *Cell) error {
 	p.skipSpaces()
 	if p.pos >= len(p.buf) {
-		return errors.New("expect value")
+		return ErrExpectValue
 	}
 	ch := p.buf[p.pos]
 	if ch == '"' || ch == '\'' {
@@ -107,7 +121,7 @@ func (p *Parser) parseValue(out *Cell) error {
 	} else if helper.IsDigit(ch) || ch == '-' || ch == '+' {
 		return p.parseInt(out)
 	} else {
-		return errors.New("expect value")
+		return ErrExpectValue
 	}
 }
 
@@ -125,7 +139,7 @@ func (p *Parser) parseString(out *Cell) error {
 		if r == '\\' {
 			pos += size
 			if len(p.buf) <= pos {
-				return errors.New("incomplete escape sequence")
+				return ErrIncompleteEscape
 			}
 			// re-interpret 1 character(not byte) after the escape sequence
 			r, size = utf8.DecodeRuneInString(p.buf[pos:])
@@ -135,7 +149,7 @@ func (p *Parser) parseString(out *Cell) error {
 	}
 
 	if len(p.buf) <= pos {
-		return errors.New("unclosed string value")
+		return ErrUnclosedString
 	}
 	pos += 1 // consume end enclose character
 
@@ -168,38 +182,38 @@ func (p *Parser) parseEqual(out *NamedCell) error {
 	var ok bool
 	out.column, ok = p.tryName()
 	if !ok {
-		return errors.New("expect column")
+		return ErrExpectColumn
 	}
 	if !p.tryPunctuation("=") {
-		return errors.New("expect =")
+		return ErrExpectEqual
 	}
 	return p.parseValue(&out.value)
 }
 
 func (p *Parser) parseSelect(out *StmtSelect) error {
 	if !p.tryKeyword("SELECT") {
-		return errors.New("expect keyword")
+		return ErrExpectKeyword
 	}
 
 	for !p.tryKeyword("FROM") {
 		if 0 < len(out.cols) && !p.tryPunctuation(",") {
-			return errors.New("expect comma")
+			return ErrExpectComma
 		}
 		if name, ok := p.tryName(); ok {
 			out.cols = append(out.cols, name)
 		} else {
-			errors.New("expect column name")
+			return ErrExpectColumn
 		}
 	}
 
 	if len(out.cols) == 0 {
-		return errors.New("expect column list")
+		return ErrExpectColumnList
 	}
 
 	var ok bool
 	out.table, ok = p.tryName()
 	if !ok {
-		return errors.New("expect table name")
+		return ErrExpectTable
 	}
 
 	return p.parseWhere(&out.keys)
@@ -207,12 +221,12 @@ func (p *Parser) parseSelect(out *StmtSelect) error {
 
 func (p *Parser) parseWhere(out *[]NamedCell) error {
 	if !p.tryKeyword("WHERE") {
-		return errors.New("expect keyword")
+		return ErrExpectKeyword
 	}
 	conds := []NamedCell{}
 	for !p.tryPunctuation(";") {
 		if 0 < len(conds) && !p.tryKeyword("AND") {
-			return errors.New("expect keyword")
+			return ErrExpectAND
 		}
 		cell := NamedCell{}
 		if err := p.parseEqual(&cell); err != nil {
@@ -222,7 +236,7 @@ func (p *Parser) parseWhere(out *[]NamedCell) error {
 		}
 	}
 	if len(conds) == 0 {
-		return errors.New("expect conditions")
+		return ErrExpectWhere
 	}
 	*out = append(*out, conds...)
 	return nil
