@@ -44,6 +44,28 @@ type NamedCell struct {
 	value  Cell
 }
 
+type StmtCreatTable struct {
+	table string
+	cols  []Column
+	pkey  []string
+}
+
+type StmtInsert struct {
+	table string
+	value []Cell
+}
+
+type StmtUpdate struct {
+	table string
+	keys  []NamedCell
+	value []NamedCell
+}
+
+type StmtDelete struct {
+	table string
+	keys  []NamedCell
+}
+
 /*
 * tryKeyword
 • Skip leading spaces.
@@ -52,25 +74,28 @@ type NamedCell struct {
 • Otherwise, return false.
 • Keywords must be separated by space or punctuation.
 */
-func (p *Parser) tryKeyword(kw string) bool {
-	if p.isEnd() {
-		return false
+func (p *Parser) tryKeyword(kws ...string) bool {
+	save := p.pos
+	bufLen := len(p.buf)
+	for _, kw := range kws {
+		p.skipSpaces()
+		// インデックスが範囲内に収まっているか、キーワードと一致するか
+		start, kwLen := p.pos, len(kw)
+		if bufLen < start+kwLen ||
+			!strings.EqualFold(p.buf[start:start+kwLen], kw) {
+			p.pos = save
+			return false
+		}
+
+		// インデックスが範囲内に収まっているか、キーワードの直後に区切り文字が存在するか
+		if start+kwLen < bufLen &&
+			!helper.IsSeparator(p.buf[start+kwLen]) {
+			p.pos = save
+			return false
+		}
+		p.pos += kwLen
 	}
 
-	// インデックスが範囲内に収まっているか、キーワードと一致するか
-	start, kwLen, bufLen := p.pos, len(kw), len(p.buf)
-	if bufLen < start+kwLen ||
-		!strings.EqualFold(p.buf[start:start+kwLen], kw) {
-		return false
-	}
-
-	// インデックスが範囲内に収まっているか、キーワードの直後に区切り文字が存在するか
-	if start+kwLen < bufLen &&
-		!helper.IsSeparator(p.buf[start+kwLen]) {
-		return false
-	}
-
-	p.pos += kwLen
 	return true
 }
 
@@ -191,10 +216,6 @@ func (p *Parser) parseEqual(out *NamedCell) error {
 }
 
 func (p *Parser) parseSelect(out *StmtSelect) error {
-	if !p.tryKeyword("SELECT") {
-		return ErrExpectKeyword
-	}
-
 	for !p.tryKeyword("FROM") {
 		if 0 < len(out.cols) && !p.tryPunctuation(",") {
 			return ErrExpectComma
@@ -216,13 +237,13 @@ func (p *Parser) parseSelect(out *StmtSelect) error {
 		return ErrExpectTable
 	}
 
+	if !p.tryKeyword("WHERE") {
+		return ErrExpectKeyword
+	}
 	return p.parseWhere(&out.keys)
 }
 
 func (p *Parser) parseWhere(out *[]NamedCell) error {
-	if !p.tryKeyword("WHERE") {
-		return ErrExpectKeyword
-	}
 	conds := []NamedCell{}
 	for !p.tryPunctuation(";") {
 		if 0 < len(conds) && !p.tryKeyword("AND") {
@@ -240,6 +261,195 @@ func (p *Parser) parseWhere(out *[]NamedCell) error {
 	}
 	*out = append(*out, conds...)
 	return nil
+}
+
+// parseCreateTable
+// parse create table statement.
+// create table t (a int64, b string, c string, primary key (b, c));
+func (p *Parser) parseCreateTable(out *StmtCreatTable) error {
+	var ok bool
+	// parse table name
+	if out.table, ok = p.tryName(); !ok {
+		return ErrExpectTable
+	}
+	if !p.tryPunctuation("(") {
+		return errors.New("expect (")
+	}
+	// parse columns
+	for !p.tryKeyword("PRIMARY", "KEY") {
+		p.skipSpaces()
+		if 0 < len(out.cols) && !p.tryPunctuation(",") {
+			return ErrExpectComma
+		}
+
+		if p.tryKeyword("PRIMARY", "KEY") {
+			break
+		}
+
+		ok = true
+		col := Column{}
+		if col.Name, ok = p.tryName(); !ok {
+			return errors.New("expect column name")
+		}
+		if p.tryKeyword("INT64") {
+			col.Type = TypeI64
+		} else if p.tryKeyword("STRING") {
+			col.Type = TypeStr
+		} else {
+			return errors.New("expect column name")
+		}
+		out.cols = append(out.cols, col)
+	}
+	if len(out.cols) == 0 {
+		return ErrExpectColumnList
+	}
+
+	// parse primary keys
+	if !p.tryPunctuation("(") {
+		return errors.New("expect (")
+	}
+	for !p.tryPunctuation(")") {
+		if 0 < len(out.pkey) && !p.tryPunctuation(",") {
+			return ErrExpectComma
+		}
+		if keyName, ok := p.tryName(); !ok {
+			return errors.New("expect key name")
+		} else {
+			out.pkey = append(out.pkey, keyName)
+		}
+	}
+	if len(out.pkey) == 0 {
+		return errors.New("expect primary keys")
+	}
+
+	if !p.tryPunctuation(")") {
+		return errors.New("expect )")
+	}
+	if !p.tryPunctuation(";") {
+		return errors.New("expect ;")
+	}
+	return nil
+}
+
+// parseInsert
+// parse insert statement.
+// ex) insert into t values (1, 'x', 'y');
+func (p *Parser) parseInsert(out *StmtInsert) error {
+	var ok bool
+	// parse table name
+	if out.table, ok = p.tryName(); !ok {
+		return ErrExpectTable
+	}
+
+	if !p.tryKeyword("VALUES") {
+		return ErrExpectKeyword
+	}
+	if !p.tryPunctuation("(") {
+		return errors.New("expect (")
+	}
+
+	for !p.tryPunctuation(")") {
+		if 0 < len(out.value) && !p.tryPunctuation(",") {
+			return ErrExpectComma
+		}
+		val := Cell{}
+		if err := p.parseValue(&val); err != nil {
+			return err
+		} else {
+			out.value = append(out.value, val)
+		}
+	}
+	if len(out.value) == 0 {
+		return errors.New("expect values")
+	}
+
+	if !p.tryPunctuation(";") {
+		return errors.New("expect ;")
+	}
+	return nil
+}
+
+// parseUpdate
+// parse update statement.
+// ex) update t set a = 1 where b = 'x' and c = 'y';
+func (p *Parser) parseUpdate(out *StmtUpdate) error {
+	var ok bool
+	// parse table name
+	if out.table, ok = p.tryName(); !ok {
+		return ErrExpectTable
+	}
+
+	if !p.tryKeyword("SET") {
+		return ErrExpectKeyword
+	}
+
+	// parse values
+	for !p.tryKeyword("WHERE") {
+		if 0 < len(out.value) && !p.tryPunctuation(",") {
+			return ErrExpectComma
+		}
+
+		val := NamedCell{}
+		if err := p.parseEqual(&val); err != nil {
+			return err
+		} else {
+			out.value = append(out.value, val)
+		}
+	}
+
+	if err := p.parseWhere(&out.keys); err != nil {
+		return err
+	}
+	return nil
+}
+
+// parseDelete
+// parse delete statement.
+// ex) delete from t where b = 'x' and c = 'y';
+func (p *Parser) parseDelete(out *StmtDelete) error {
+	var ok bool
+	// parse table name
+	if out.table, ok = p.tryName(); !ok {
+		return ErrExpectTable
+	}
+
+	if !p.tryKeyword("WHERE") {
+		return ErrExpectKeyword
+	}
+	if err := p.parseWhere(&out.keys); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *Parser) parseStmt() (out interface{}, err error) {
+	if p.tryKeyword("SELECT") {
+		stmt := &StmtSelect{}
+		err = p.parseSelect(stmt)
+		out = stmt
+	} else if p.tryKeyword("CREATE", "TABLE") {
+		stmt := &StmtCreatTable{}
+		err = p.parseCreateTable(stmt)
+		out = stmt
+	} else if p.tryKeyword("INSERT", "INTO") {
+		stmt := &StmtInsert{}
+		err = p.parseInsert(stmt)
+		out = stmt
+	} else if p.tryKeyword("UPDATE") {
+		stmt := &StmtUpdate{}
+		err = p.parseUpdate(stmt)
+		out = stmt
+	} else if p.tryKeyword("DELETE", "FROM") {
+		stmt := &StmtDelete{}
+		err = p.parseDelete(stmt)
+		out = stmt
+	} else {
+		err = errors.New("unknown statement")
+	}
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (p *Parser) skipSpaces() {
