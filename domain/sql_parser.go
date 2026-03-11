@@ -19,6 +19,17 @@ func NewParser(s string) Parser {
 	return Parser{buf: s, pos: 0}
 }
 
+type StmtSelect struct {
+	table string
+	cols  []string
+	keys  []NamedCell
+}
+
+type NamedCell struct {
+	column string
+	value  Cell
+}
+
 /*
 * tryKeyword
 • Skip leading spaces.
@@ -32,17 +43,20 @@ func (p *Parser) tryKeyword(kw string) bool {
 		return false
 	}
 
-	pos := p.pos
-	for pos < len(p.buf) && !helper.IsSeparator(p.buf[pos]) {
-		pos += 1
-	}
-
-	word := p.buf[p.pos:pos]
-	if !strings.EqualFold(kw, word) {
+	// インデックスが範囲内に収まっているか、キーワードと一致するか
+	start, kwLen, bufLen := p.pos, len(kw), len(p.buf)
+	if bufLen < start+kwLen ||
+		!strings.EqualFold(p.buf[start:start+kwLen], kw) {
 		return false
 	}
 
-	p.pos = pos
+	// インデックスが範囲内に収まっているか、キーワードの直後に区切り文字が存在するか
+	if start+kwLen < bufLen &&
+		!helper.IsSeparator(p.buf[start+kwLen]) {
+		return false
+	}
+
+	p.pos += kwLen
 	return true
 }
 
@@ -51,7 +65,7 @@ func (p *Parser) tryKeyword(kw string) bool {
 • Skip leading spaces.
 • First char is a letter or _, following chars are letters, digits, or _.
 • On success, return true and advance pos.
-• On failure, return false and keep pos.
+• On failure, return false.
 */
 func (p *Parser) tryName() (string, bool) {
 	if p.isEnd() {
@@ -71,6 +85,15 @@ func (p *Parser) tryName() (string, bool) {
 	s := p.buf[p.pos:pos]
 	p.pos = pos
 	return s, true
+}
+
+func (p *Parser) tryPunctuation(tok string) bool {
+	p.skipSpaces()
+	if !(p.pos+len(tok) <= len(p.buf) && p.buf[p.pos:p.pos+len(tok)] == tok) {
+		return false
+	}
+	p.pos += len(tok)
+	return true
 }
 
 func (p *Parser) parseValue(out *Cell) error {
@@ -138,6 +161,70 @@ func (p *Parser) parseInt(out *Cell) (err error) {
 	out.I64 = val
 	p.pos = pos
 
+	return nil
+}
+
+func (p *Parser) parseEqual(out *NamedCell) error {
+	var ok bool
+	out.column, ok = p.tryName()
+	if !ok {
+		return errors.New("expect column")
+	}
+	if !p.tryPunctuation("=") {
+		return errors.New("expect =")
+	}
+	return p.parseValue(&out.value)
+}
+
+func (p *Parser) parseSelect(out *StmtSelect) error {
+	if !p.tryKeyword("SELECT") {
+		return errors.New("expect keyword")
+	}
+
+	for !p.tryKeyword("FROM") {
+		if 0 < len(out.cols) && !p.tryPunctuation(",") {
+			return errors.New("expect comma")
+		}
+		if name, ok := p.tryName(); ok {
+			out.cols = append(out.cols, name)
+		} else {
+			errors.New("expect column name")
+		}
+	}
+
+	if len(out.cols) == 0 {
+		return errors.New("expect column list")
+	}
+
+	var ok bool
+	out.table, ok = p.tryName()
+	if !ok {
+		return errors.New("expect table name")
+	}
+
+	return p.parseWhere(&out.keys)
+}
+
+func (p *Parser) parseWhere(out *[]NamedCell) error {
+	if !p.tryKeyword("WHERE") {
+		return errors.New("expect keyword")
+	}
+	conds := []NamedCell{}
+	for !p.tryPunctuation(";") {
+		if 0 < len(conds) && !p.tryKeyword("AND") {
+			return errors.New("expect keyword")
+		}
+		cell := NamedCell{}
+		if err := p.parseEqual(&cell); err != nil {
+			return err
+		} else {
+			conds = append(conds, cell)
+		}
+	}
+	if len(conds) == 0 {
+		return errors.New("expect conditions")
+	}
+	*out = append(*out, conds...)
 	return nil
 }
 
