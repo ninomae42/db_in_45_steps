@@ -44,7 +44,7 @@ type NamedCell struct {
 	value  Cell
 }
 
-type StmtCreatTable struct {
+type StmtCreateTable struct {
 	table string
 	cols  []Column
 	pkey  []string
@@ -266,7 +266,7 @@ func (p *Parser) parseWhere(out *[]NamedCell) error {
 // parseCreateTable
 // parse create table statement.
 // create table t (a int64, b string, c string, primary key (b, c));
-func (p *Parser) parseCreateTable(out *StmtCreatTable) error {
+func (p *Parser) parseCreateTable(out *StmtCreateTable) error {
 	var ok bool
 	// parse table name
 	if out.table, ok = p.tryName(); !ok {
@@ -296,7 +296,7 @@ func (p *Parser) parseCreateTable(out *StmtCreatTable) error {
 		} else if p.tryKeyword("STRING") {
 			col.Type = TypeStr
 		} else {
-			return errors.New("expect column name")
+			return errors.New("expect column type")
 		}
 		out.cols = append(out.cols, col)
 	}
@@ -428,7 +428,7 @@ func (p *Parser) parseStmt() (out interface{}, err error) {
 		err = p.parseSelect(stmt)
 		out = stmt
 	} else if p.tryKeyword("CREATE", "TABLE") {
-		stmt := &StmtCreatTable{}
+		stmt := &StmtCreateTable{}
 		err = p.parseCreateTable(stmt)
 		out = stmt
 	} else if p.tryKeyword("INSERT", "INTO") {

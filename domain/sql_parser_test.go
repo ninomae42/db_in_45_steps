@@ -19,14 +19,18 @@ func TestParseName(t *testing.T) {
 }
 
 func TestParseKeyword(t *testing.T) {
-	p := NewParser(" select  HELLO ")
-	assert.False(t, p.tryKeyword("sel"))
-	assert.True(t, p.tryKeyword("SELECT"))
-	assert.True(t, p.tryKeyword("hello") && p.isEnd())
+	t.Run("tryKeyWord single target", func(t *testing.T) {
+		p := NewParser(" select  HELLO ")
+		assert.False(t, p.tryKeyword("sel"))
+		assert.True(t, p.tryKeyword("SELECT"))
+		assert.True(t, p.tryKeyword("hello") && p.isEnd())
+	})
 
-	p = NewParser(" select  HELLO ")
-	assert.False(t, p.tryKeyword("select", "hi"))
-	assert.True(t, p.tryKeyword("select", "hello") && p.isEnd())
+	t.Run("tryKeyword multiple target", func(t *testing.T) {
+		p := NewParser(" select  HELLO ")
+		assert.False(t, p.tryKeyword("select", "hi"))
+		assert.True(t, p.tryKeyword("select", "hello") && p.isEnd())
+	})
 }
 
 func testParseValue(t *testing.T, s string, ref Cell) {
@@ -77,7 +81,7 @@ func TestParseStmt(t *testing.T) {
 	testParseStmt(t, s, stmt)
 
 	s = "create table t (a string, b int64, primary key (b));"
-	stmt = &StmtCreatTable{
+	stmt = &StmtCreateTable{
 		table: "t",
 		cols:  []Column{{"a", TypeStr}, {"b", TypeI64}},
 		pkey:  []string{"b"},
