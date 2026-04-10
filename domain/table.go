@@ -202,7 +202,7 @@ func setValue(schema *Schema, values []NamedCell, row Row) (Row, error) {
 		idx := slices.IndexFunc(schema.Cols, func(expr Column) bool {
 			return expr.Name == col.column && expr.Type == col.value.Type
 		})
-		if idx < 0 {
+		if idx < 0 || slices.Contains(schema.PKey, idx) {
 			return nil, fmt.Errorf("column name mismatch: missing or invalid column %q", col.column)
 		}
 		row[idx] = col.value
@@ -224,6 +224,15 @@ func (db *DB) execInsert(stmt *StmtInsert) (count int, err error) {
 	schema, err := db.GetSchema(stmt.table)
 	if err != nil {
 		return 0, err
+	}
+
+	if len(schema.Cols) != len(stmt.value) {
+		return 0, fmt.Errorf("column count mismatch: expected %d, got %d", len(schema.Cols), len(stmt.value))
+	}
+	for i := range schema.Cols {
+		if schema.Cols[i].Type != stmt.value[i].Type {
+			return 0, fmt.Errorf("column type mismatch: column %q expects %v, got %v", schema.Cols[i].Name, schema.Cols[i].Type, stmt.value[i].Type)
+		}
 	}
 
 	updated, err := db.Insert(&schema, stmt.value)
