@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTableByPKey(t *testing.T) {
@@ -60,6 +61,73 @@ func TestTableByPKey(t *testing.T) {
 
 	ok, err = db.Select(schema, row)
 	assert.True(t, !ok && err == nil) // 削除後の状態確認(Read after Delete)
+}
+
+func parseStmt(t *testing.T, s string) interface{} {
+	p := NewParser(s)
+	stmt, err := p.parseStmt()
+	require.Nil(t, err)
+	return stmt
+}
+
+func TestSQLByPKey(t *testing.T) {
+	db := DB{}
+	db.KV.log.FileName = ".test_db"
+	defer os.Remove(db.KV.log.FileName)
+
+	os.Remove(db.KV.log.FileName)
+	err := db.Open()
+	assert.Nil(t, err)
+	defer db.Close()
+
+	s := "create table link (time int64, src string, dst string, primary key (src, dst));"
+	_, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+
+	// added myself
+	schema, err := db.GetSchema("link")
+	require.Nil(t, err)
+	assert.Equal(t, "link", schema.Table)
+	assert.Equal(t, 3, len(schema.Cols))
+	assert.Equal(t, 2, len(schema.PKey))
+
+	s = "insert into link values (123, 'bob', 'alice');"
+	r, err := db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, 1, r.Updated)
+
+	s = "select time from link where dst = 'alice' and src = 'bob';"
+	r, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, []Row{{Cell{Type: TypeI64, I64: 123}}}, r.Values)
+
+	// s = "update link set time = 456 where dst = 'alice' and src = 'bob';"
+	// r, err = db.ExecStmt(parseStmt(t, s))
+	// require.Nil(t, err)
+	// require.Equal(t, 1, r.Updated)
+
+	// s = "select time from link where dst = 'alice' and src = 'bob';"
+	// r, err = db.ExecStmt(parseStmt(t, s))
+	// require.Nil(t, err)
+	// require.Equal(t, []Row{{Cell{Type: TypeI64, I64: 456}}}, r.Values)
+
+	// // reopen
+	// err = db.Close()
+	// require.Nil(t, err)
+	// db = DB{}
+	// db.KV.log.FileName = ".test_db"
+	// err = db.Open()
+	// require.Nil(t, err)
+
+	// s = "delete from link where src = 'bob' and dst = 'alice';"
+	// r, err = db.ExecStmt(parseStmt(t, s))
+	// require.Nil(t, err)
+	// require.Equal(t, 1, r.Updated)
+
+	// s = "select time from link where dst = 'alice' and src = 'bob';"
+	// r, err = db.ExecStmt(parseStmt(t, s))
+	// require.Nil(t, err)
+	// require.Equal(t, 0, len(r.Values))
 }
 
 // QzBQWVJJOUhU https://trialofcode.org/

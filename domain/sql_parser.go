@@ -135,6 +135,32 @@ func (p *Parser) tryPunctuation(tok string) bool {
 	return true
 }
 
+func (p *Parser) parseCommaList(item func() error) error {
+	if !p.tryPunctuation("(") {
+		return errors.New("expect (")
+	}
+	comma := false
+	for !p.tryPunctuation(")") {
+		if comma && !p.tryPunctuation(",") {
+			return errors.New("expect ,")
+		}
+		comma = true
+		if err := item(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (p *Parser) parseNameItem(out *[]string) error {
+	name, ok := p.tryName()
+	if !ok {
+		return errors.New("expect name")
+	}
+	*out = append(*out, name)
+	return nil
+}
+
 func (p *Parser) parseValue(out *Cell) error {
 	p.skipSpaces()
 	if p.pos >= len(p.buf) {
@@ -260,6 +286,32 @@ func (p *Parser) parseWhere(out *[]NamedCell) error {
 		return ErrExpectWhere
 	}
 	*out = append(*out, conds...)
+	return nil
+}
+
+func (p *Parser) parseCreateTableItem(out *StmtCreateTable) error {
+	if p.tryKeyword("PRIMARY", "KEY") {
+		return p.parseCommaList(func() error { return p.parseNameItem(&out.pkey) })
+	}
+
+	var ok bool
+	col := Column{}
+	if col.Name, ok = p.tryName(); !ok {
+		return errors.New("expect name")
+	}
+	kind, ok := p.tryName()
+	if !ok {
+		return errors.New("expect name")
+	}
+	switch kind {
+	case "int64":
+		col.Type = TypeI64
+	case "string":
+		col.Type = TypeStr
+	default:
+		return errors.New("unknown column type")
+	}
+	out.cols = append(out.cols, col)
 	return nil
 }
 
