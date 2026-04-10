@@ -130,9 +130,9 @@ func (db *DB) execCreateTable(stmt *StmtCreateTable) (err error) {
 
 func (db *DB) execSelect(stmt *StmtSelect) ([]Row, error) {
 	// 1. Get schema info based on table name
-	schema, ok := db.tables[stmt.table]
-	if !ok {
-		return nil, errors.New("table is not found")
+	schema, err := db.GetSchema(stmt.table)
+	if err != nil {
+		return nil, err
 	}
 
 	// 2. Get selected column indices from schema.Cols based on column name
@@ -146,7 +146,8 @@ func (db *DB) execSelect(stmt *StmtSelect) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	if ok, err = db.Select(&schema, row); err != nil {
+	ok, err := db.Select(&schema, row)
+	if err != nil {
 		return nil, err
 	}
 	if !ok {
@@ -220,27 +221,27 @@ func subsetRow(row Row, indices []int) Row {
 }
 
 func (db *DB) execInsert(stmt *StmtInsert) (count int, err error) {
-	schema, ok := db.tables[stmt.table]
-	if !ok {
-		return 0, errors.New("table is not found")
+	schema, err := db.GetSchema(stmt.table)
+	if err != nil {
+		return 0, err
 	}
 
 	updated, err := db.Insert(&schema, stmt.value)
 	if err != nil {
 		return 0, err
 	}
-	if !updated {
-		return 0, nil
+	if updated {
+		count++
 	}
 
-	return 1, nil
+	return count, nil
 }
 
 func (db *DB) execUpdate(stmt *StmtUpdate) (count int, err error) {
 	// 1. Get schema info based on the table name
-	schema, ok := db.tables[stmt.table]
-	if !ok {
-		return 0, errors.New("table is not found")
+	schema, err := db.GetSchema(stmt.table)
+	if err != nil {
+		return 0, err
 	}
 
 	// 2. Check WHERE matches the primary key, and get a Row with key filled
@@ -254,14 +255,36 @@ func (db *DB) execUpdate(stmt *StmtUpdate) (count int, err error) {
 	if err != nil {
 		return 0, err
 	}
-	if ok, err = db.Update(&schema, row); err != nil {
+	updated, err := db.Update(&schema, row)
+	if err != nil {
 		return 0, err
 	}
-	if !ok {
-		return 0, nil
+	if updated {
+		count++
 	}
 
-	return 1, nil
+	return count, nil
 }
 
-func (db *DB) execDelete(stmt *StmtDelete) (count int, err error) { return 0, nil }
+func (db *DB) execDelete(stmt *StmtDelete) (count int, err error) {
+	// 1. Get schema info based on the table name
+	schema, err := db.GetSchema(stmt.table)
+	if err != nil {
+		return 0, err
+	}
+
+	// 2. Check WHERE matches the primary key, and get a Row with key filled
+	row, err := makePKey(&schema, stmt.keys)
+	if err != nil {
+		return 0, err
+	}
+	updated, err := db.Delete(&schema, row)
+	if err != nil {
+		return 0, err
+	}
+	if updated {
+		count++
+	}
+
+	return count, nil
+}

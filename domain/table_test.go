@@ -111,23 +111,23 @@ func TestSQLByPKey(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, []Row{{Cell{Type: TypeI64, I64: 456}}}, r.Values)
 
-	// // reopen
-	// err = db.Close()
-	// require.Nil(t, err)
-	// db = DB{}
-	// db.KV.log.FileName = ".test_db"
-	// err = db.Open()
-	// require.Nil(t, err)
+	// reopen
+	err = db.Close()
+	require.Nil(t, err)
+	db = DB{}
+	db.KV.log.FileName = ".test_db"
+	err = db.Open()
+	require.Nil(t, err)
 
-	// s = "delete from link where src = 'bob' and dst = 'alice';"
-	// r, err = db.ExecStmt(parseStmt(t, s))
-	// require.Nil(t, err)
-	// require.Equal(t, 1, r.Updated)
+	s = "delete from link where src = 'bob' and dst = 'alice';"
+	r, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, 1, r.Updated)
 
-	// s = "select time from link where dst = 'alice' and src = 'bob';"
-	// r, err = db.ExecStmt(parseStmt(t, s))
-	// require.Nil(t, err)
-	// require.Equal(t, 0, len(r.Values))
+	s = "select time from link where dst = 'alice' and src = 'bob';"
+	r, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, 0, len(r.Values))
 }
 
 // QzBQWVJJOUhU https://trialofcode.org/
