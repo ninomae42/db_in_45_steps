@@ -250,7 +250,14 @@ func (db *DB) execUpdate(stmt *StmtUpdate) (count int, err error) {
 		return 0, err
 	}
 
-	// 3. Check that SET matches the column name, and get a Row with value filled
+	// 3. Fetch current row from database based on primary key
+	if ok, err := db.Select(&schema, row); err != nil {
+		return 0, err
+	} else if !ok {
+		return 0, ErrRowNotFound
+	}
+
+	// 4. Check that SET matches the column name, and get a Row with value updated
 	row, err = setValue(&schema, stmt.value, row)
 	if err != nil {
 		return 0, err

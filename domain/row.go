@@ -8,6 +8,7 @@ import (
 var (
 	ErrExtraData     = errors.New("extra data remaining")
 	ErrKeyTooShort   = errors.New("key is too short")
+	ErrRowNotFound   = errors.New("row is not found")
 	ErrTableMismatch = errors.New("table name mismatch")
 )
 

@@ -130,4 +130,43 @@ func TestSQLByPKey(t *testing.T) {
 	require.Equal(t, 0, len(r.Values))
 }
 
+func TestSQLUpdatePreservesUnsetColumns(t *testing.T) {
+	db := DB{}
+	db.KV.log.FileName = ".test_db_update"
+	defer os.Remove(db.KV.log.FileName)
+
+	os.Remove(db.KV.log.FileName)
+	err := db.Open()
+	require.Nil(t, err)
+	defer db.Close()
+
+	// 非PKカラムが name, age の2つあるテーブル
+	s := "create table users (id int64, name string, age int64, primary key (id));"
+	_, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+
+	s = "insert into users values (1, 'alice', 30);"
+	r, err := db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, 1, r.Updated)
+
+	// name だけ UPDATE（age は SET しない）
+	s = "update users set name = 'bob' where id = 1;"
+	r, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, 1, r.Updated)
+
+	// name が更新されていること
+	s = "select name from users where id = 1;"
+	r, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, []Row{{Cell{Type: TypeStr, Str: []byte("bob")}}}, r.Values)
+
+	// age が 0 に上書きされず、元の値 30 が保持されていること
+	s = "select age from users where id = 1;"
+	r, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, []Row{{Cell{Type: TypeI64, I64: 30}}}, r.Values)
+}
+
 // QzBQWVJJOUhU https://trialofcode.org/
