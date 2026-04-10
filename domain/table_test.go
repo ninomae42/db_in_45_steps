@@ -101,15 +101,15 @@ func TestSQLByPKey(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, []Row{{Cell{Type: TypeI64, I64: 123}}}, r.Values)
 
-	// s = "update link set time = 456 where dst = 'alice' and src = 'bob';"
-	// r, err = db.ExecStmt(parseStmt(t, s))
-	// require.Nil(t, err)
-	// require.Equal(t, 1, r.Updated)
+	s = "update link set time = 456 where dst = 'alice' and src = 'bob';"
+	r, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, 1, r.Updated)
 
-	// s = "select time from link where dst = 'alice' and src = 'bob';"
-	// r, err = db.ExecStmt(parseStmt(t, s))
-	// require.Nil(t, err)
-	// require.Equal(t, []Row{{Cell{Type: TypeI64, I64: 456}}}, r.Values)
+	s = "select time from link where dst = 'alice' and src = 'bob';"
+	r, err = db.ExecStmt(parseStmt(t, s))
+	require.Nil(t, err)
+	require.Equal(t, []Row{{Cell{Type: TypeI64, I64: 456}}}, r.Values)
 
 	// // reopen
 	// err = db.Close()

@@ -143,6 +143,9 @@ func (db *DB) execSelect(stmt *StmtSelect) ([]Row, error) {
 
 	// 3. Check WHERE matches the primary key, and get row with key filled.
 	row, err := makePKey(&schema, stmt.keys)
+	if err != nil {
+		return nil, err
+	}
 	if ok, err = db.Select(&schema, row); err != nil {
 		return nil, err
 	}
@@ -191,6 +194,21 @@ func makePKey(schema *Schema, keys []NamedCell) (Row, error) {
 	return row, nil
 }
 
+// setValue
+// check that SET matches the column name, return a Row with the value filled
+func setValue(schema *Schema, values []NamedCell, row Row) (Row, error) {
+	for _, col := range values {
+		idx := slices.IndexFunc(schema.Cols, func(expr Column) bool {
+			return expr.Name == col.column && expr.Type == col.value.Type
+		})
+		if idx < 0 {
+			return nil, fmt.Errorf("column name mismatch: missing or invalid column %q", col.column)
+		}
+		row[idx] = col.value
+	}
+	return row, nil
+}
+
 // subsetRow
 // return only the columns in select a, b
 func subsetRow(row Row, indices []int) Row {
@@ -217,5 +235,33 @@ func (db *DB) execInsert(stmt *StmtInsert) (count int, err error) {
 
 	return 1, nil
 }
-func (db *DB) execUpdate(stmt *StmtUpdate) (count int, err error) { return 0, nil }
+
+func (db *DB) execUpdate(stmt *StmtUpdate) (count int, err error) {
+	// 1. Get schema info based on the table name
+	schema, ok := db.tables[stmt.table]
+	if !ok {
+		return 0, errors.New("table is not found")
+	}
+
+	// 2. Check WHERE matches the primary key, and get a Row with key filled
+	row, err := makePKey(&schema, stmt.keys)
+	if err != nil {
+		return 0, err
+	}
+
+	// 3. Check that SET matches the column name, and get a Row with value filled
+	row, err = setValue(&schema, stmt.value, row)
+	if err != nil {
+		return 0, err
+	}
+	if ok, err = db.Update(&schema, row); err != nil {
+		return 0, err
+	}
+	if !ok {
+		return 0, nil
+	}
+
+	return 1, nil
+}
+
 func (db *DB) execDelete(stmt *StmtDelete) (count int, err error) { return 0, nil }
