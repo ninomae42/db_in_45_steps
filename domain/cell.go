@@ -34,7 +34,29 @@ func NewCell(t CellType) Cell {
  | 4 bytes | ...  |
 */
 
-func (cell *Cell) Encode(toAppend []byte) []byte {
+func (cell *Cell) EncodeKey(toAppend []byte) []byte {
+	switch cell.Type {
+	case TypeI64:
+		return binary.BigEndian.AppendUint64(toAppend, uint64(cell.I64)^(1<<63))
+	case TypeStr:
+		return encodeStrKey(toAppend, cell.Str)
+	default:
+		panic("unreachable")
+	}
+}
+
+func encodeStrKey(toAppend []byte, input []byte) []byte {
+	for _, ch := range input {
+		if ch == 0x00 || ch == 0x01 {
+			toAppend = append(toAppend, 0x01, ch+1)
+		} else {
+			toAppend = append(toAppend, ch)
+		}
+	}
+	return append(toAppend, 0x00)
+}
+
+func (cell *Cell) EncodeVal(toAppend []byte) []byte {
 	switch cell.Type {
 	case TypeI64:
 		return binary.LittleEndian.AppendUint64(toAppend, uint64(cell.I64))
@@ -46,7 +68,7 @@ func (cell *Cell) Encode(toAppend []byte) []byte {
 	}
 }
 
-func (cell *Cell) Decode(data []byte) (rest []byte, err error) {
+func (cell *Cell) DecodeVal(data []byte) (rest []byte, err error) {
 	switch cell.Type {
 	case TypeI64:
 		if len(data) < 8 {
@@ -67,4 +89,41 @@ func (cell *Cell) Decode(data []byte) (rest []byte, err error) {
 	default:
 		panic("unreachable")
 	}
+}
+
+func (cell *Cell) DecodeKey(data []byte) (rest []byte, err error) {
+	switch cell.Type {
+	case TypeI64:
+		if len(data) < 8 {
+			return data, ErrIncompleteData
+		}
+		cell.I64 = int64(binary.BigEndian.Uint64(data[0:8]) ^ (1 << 63))
+		return data[8:], nil
+	case TypeStr:
+		out, rest, err := decodeStrKey(data)
+		if err != nil {
+			return nil, err
+		}
+		cell.Str = out
+		return rest, nil
+	default:
+		panic("unreachable")
+	}
+}
+
+func decodeStrKey(data []byte) (out []byte, rest []byte, err error) {
+	idx := 0
+	for idx < len(data) {
+		if data[idx] == 0x00 {
+			idx++
+			break
+		} else if data[idx] == 0x01 {
+			out = append(out, data[idx+1]-1)
+			idx += 2
+		} else {
+			out = append(out, data[idx])
+			idx++
+		}
+	}
+	return out, data[idx:], nil
 }

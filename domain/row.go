@@ -33,20 +33,20 @@ func (row Row) EncodeKey(schema *Schema) (key []byte) {
 	key = append(key, []byte(schema.Table)...)
 	key = append(key, 0x00)
 	check(len(row) == len(schema.Cols))
-	for idx, cell := range row {
-		if slices.Contains(schema.PKey, idx) {
-			check(cell.Type == schema.Cols[idx].Type)
-			key = cell.Encode(key)
-		}
+	for _, idx := range schema.PKey {
+		cell := row[idx]
+		check(cell.Type == schema.Cols[idx].Type)
+		key = cell.EncodeKey(key)
 	}
 	return
 }
+
 func (row Row) EncodeVal(schema *Schema) (val []byte) {
 	check(len(row) == len(schema.Cols))
 	for idx, cell := range row {
 		if !slices.Contains(schema.PKey, idx) {
 			check(cell.Type == schema.Cols[idx].Type)
-			val = cell.Encode(val)
+			val = cell.EncodeVal(val)
 		}
 	}
 	return
@@ -68,13 +68,10 @@ func (row Row) DecodeKey(schema *Schema, key []byte) (err error) {
 
 	key = key[len(schema.Table)+1:]
 
-	for idx, column := range schema.Cols {
-		if !slices.Contains(schema.PKey, idx) {
-			continue
-
-		}
+	for _, idx := range schema.PKey {
+		column := schema.Cols[idx]
 		cell := NewCell(column.Type)
-		if key, err = cell.Decode(key); err != nil {
+		if key, err = cell.DecodeKey(key); err != nil {
 			return
 		}
 		row[idx] = cell
@@ -95,7 +92,7 @@ func (row Row) DecodeVal(schema *Schema, val []byte) (err error) {
 			continue
 		}
 		cell := NewCell(column.Type)
-		if val, err = cell.Decode(val); err != nil {
+		if val, err = cell.DecodeVal(val); err != nil {
 			return
 		}
 		row[idx] = cell
