@@ -15,9 +15,6 @@ func (kv *KV) Open() error {
 	if err := kv.log.Open(); err != nil {
 		return err
 	}
-	kv.keys = [][]byte{}
-	kv.vals = [][]byte{}
-
 	entries := []Entry{}
 	for {
 		ent := Entry{}
@@ -32,15 +29,15 @@ func (kv *KV) Open() error {
 	slices.SortStableFunc(entries, func(a, b Entry) int {
 		return bytes.Compare(a.key, b.key)
 	})
-
+	kv.keys, kv.vals = kv.keys[:0], kv.vals[:0]
 	for _, ent := range entries {
-		idx, exist := slices.BinarySearchFunc(kv.keys, ent.key, bytes.Compare)
-		if ent.deleted && exist {
-			kv.keys = slices.Delete(kv.keys, idx, idx+1)
-			kv.vals = slices.Delete(kv.vals, idx, idx+1)
-		} else if !exist {
-			kv.keys = slices.Insert(kv.keys, idx, ent.key)
-			kv.vals = slices.Insert(kv.vals, idx, ent.val)
+		n := len(kv.keys)
+		if 0 < n && bytes.Equal(kv.keys[n-1], ent.key) {
+			kv.keys, kv.vals = kv.keys[:n-1], kv.vals[:n-1]
+		}
+		if !ent.deleted {
+			kv.keys = append(kv.keys, ent.key)
+			kv.vals = append(kv.vals, ent.val)
 		}
 	}
 
