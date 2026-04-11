@@ -2,19 +2,23 @@ package domain
 
 import (
 	"bytes"
+	"slices"
 )
 
 type KV struct {
-	log Log
-	mem map[string][]byte
+	log  Log
+	keys [][]byte
+	vals [][]byte
 }
 
 func (kv *KV) Open() error {
 	if err := kv.log.Open(); err != nil {
 		return err
 	}
-	kv.mem = map[string][]byte{}
+	kv.keys = [][]byte{}
+	kv.vals = [][]byte{}
 
+	entries := []Entry{}
 	for {
 		ent := Entry{}
 		eof, err := kv.log.Read(&ent)
@@ -23,10 +27,20 @@ func (kv *KV) Open() error {
 		} else if err != nil {
 			return err
 		}
-		if ent.deleted {
-			delete(kv.mem, string(ent.key))
-		} else {
-			kv.mem[string(ent.key)] = ent.val
+		entries = append(entries, ent)
+	}
+	slices.SortStableFunc(entries, func(a, b Entry) int {
+		return bytes.Compare(a.key, b.key)
+	})
+
+	for _, ent := range entries {
+		idx, exist := slices.BinarySearchFunc(kv.keys, ent.key, bytes.Compare)
+		if ent.deleted && exist {
+			kv.keys = slices.Delete(kv.keys, idx, idx+1)
+			kv.vals = slices.Delete(kv.vals, idx, idx+1)
+		} else if !exist {
+			kv.keys = slices.Insert(kv.keys, idx, ent.key)
+			kv.vals = slices.Insert(kv.vals, idx, ent.val)
 		}
 	}
 
@@ -38,8 +52,8 @@ func (kv *KV) Close() error {
 }
 
 func (kv *KV) Get(key []byte) (val []byte, ok bool, err error) {
-	if val, ok = kv.mem[string(key)]; ok {
-		return val, ok, nil
+	if idx, ok := slices.BinarySearchFunc(kv.keys, key, bytes.Compare); ok {
+		return kv.vals[idx], true, nil
 	}
 	return nil, false, nil
 }
@@ -53,23 +67,27 @@ const (
 )
 
 func (kv *KV) SetEx(key []byte, val []byte, mode UpdateMode) (updated bool, err error) {
-	prev, exist := kv.mem[string(key)]
+	idx, exist := slices.BinarySearchFunc(kv.keys, key, bytes.Compare)
 	switch mode {
 	case ModeUpsert: // same as the old Set(), insert or overwrite
-		updated = !exist || !bytes.Equal(prev, val)
+		updated = !exist || !bytes.Equal(kv.vals[idx], val)
 	case ModeInsert: // if the key already exists, do not update and return false
 		updated = !exist
 	case ModeUpdate: // only update existing keys
-		updated = exist && !bytes.Equal(prev, val)
+		updated = exist && !bytes.Equal(kv.vals[idx], val)
 	default:
 		panic("unreachable")
 	}
 	if updated {
-		ent := NewPutEntry(key, val)
-		if err = kv.log.Write(ent); err != nil {
+		if err = kv.log.Write(NewPutEntry(key, val)); err != nil {
 			return false, err
 		}
-		kv.mem[string(key)] = val
+		if exist {
+			kv.vals[idx] = val
+		} else {
+			kv.keys = slices.Insert(kv.keys, idx, key)
+			kv.vals = slices.Insert(kv.vals, idx, val)
+		}
 	}
 	return
 }
@@ -78,14 +96,15 @@ func (kv *KV) Set(key []byte, val []byte) (updated bool, err error) {
 	return kv.SetEx(key, val, ModeUpsert)
 }
 
-func (kv *KV) Del(key []byte) (deleted bool, err error) {
-	_, deleted = kv.mem[string(key)]
-	if deleted {
-		ent := NewDelEntry(key)
-		if err := kv.log.Write(ent); err != nil {
+func (kv *KV) Del(key []byte) (bool, error) {
+	if idx, ok := slices.BinarySearchFunc(kv.keys, key, bytes.Compare); ok {
+		if err := kv.log.Write(NewDelEntry(key)); err != nil {
 			return false, err
 		}
-		delete(kv.mem, string(key))
+		kv.keys = slices.Delete(kv.keys, idx, idx+1)
+		kv.vals = slices.Delete(kv.vals, idx, idx+1)
+		return true, nil
 	}
-	return
+
+	return false, nil
 }
