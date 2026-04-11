@@ -105,3 +105,50 @@ func (kv *KV) Del(key []byte) (bool, error) {
 
 	return false, nil
 }
+
+type KVIterator struct {
+	keys [][]byte
+	vals [][]byte
+	pos  int // current position
+}
+
+func (kv *KV) Seek(key []byte) (*KVIterator, error) {
+	pos, _ := slices.BinarySearchFunc(kv.keys, key, bytes.Compare)
+	return &KVIterator{keys: kv.keys, vals: kv.vals, pos: pos}, nil
+}
+
+// Valid
+// is travarsal ended or not
+func (iter *KVIterator) Valid() bool {
+	return 0 <= iter.pos && iter.pos < len(iter.keys)
+}
+
+// Key
+// get current element key
+func (iter *KVIterator) Key() []byte {
+	return iter.keys[iter.pos]
+}
+
+// Val
+// get current element value
+func (iter *KVIterator) Val() []byte {
+	return iter.vals[iter.pos]
+}
+
+// Next
+// move to next element
+func (iter *KVIterator) Next() error {
+	if iter.pos < len(iter.keys) {
+		iter.pos++
+	}
+	return nil
+}
+
+// Prev
+// move to previous element
+func (iter *KVIterator) Prev() error {
+	if 0 <= iter.pos {
+		iter.pos--
+	}
+	return nil
+}
