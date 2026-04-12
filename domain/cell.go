@@ -100,11 +100,7 @@ func (cell *Cell) DecodeKey(data []byte) (rest []byte, err error) {
 		cell.I64 = int64(binary.BigEndian.Uint64(data[0:8]) ^ (1 << 63))
 		return data[8:], nil
 	case TypeStr:
-		out, rest, err := decodeStrKey(data)
-		if err != nil {
-			return nil, err
-		}
-		cell.Str = out
+		cell.Str, rest, err = decodeStrKey(data)
 		return rest, nil
 	default:
 		panic("unreachable")
@@ -112,18 +108,21 @@ func (cell *Cell) DecodeKey(data []byte) (rest []byte, err error) {
 }
 
 func decodeStrKey(data []byte) (out []byte, rest []byte, err error) {
-	idx := 0
-	for idx < len(data) {
-		if data[idx] == 0x00 {
-			idx++
-			break
-		} else if data[idx] == 0x01 {
-			out = append(out, data[idx+1]-1)
-			idx += 2
+	escape := false
+	for i, ch := range data {
+		if escape {
+			if ch != 0x01 && ch != 0x02 {
+				return nil, data, errors.New("bad escape")
+			}
+			out = append(out, ch-1)
+			escape = false
+		} else if ch == 0x00 {
+			return out, data[i+1:], nil
+		} else if ch == 0x01 {
+			escape = true
 		} else {
-			out = append(out, data[idx])
-			idx++
+			out = append(out, ch)
 		}
 	}
-	return out, data[idx:], nil
+	return nil, data, errors.New("string is not ended")
 }
