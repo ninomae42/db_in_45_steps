@@ -8,6 +8,7 @@ import (
 var (
 	ErrExtraData     = errors.New("extra data remaining")
 	ErrKeyTooShort   = errors.New("key is too short")
+	ErrOutOfRange    = errors.New("out of range")
 	ErrRowNotFound   = errors.New("row is not found")
 	ErrTableMismatch = errors.New("table name mismatch")
 )
@@ -58,12 +59,12 @@ func (row Row) DecodeKey(schema *Schema, key []byte) (err error) {
 	// テーブル名+終端文字(\x00)の長さを検証
 	tablePrefixLen := len(schema.Table) + 1
 	if len(key) < tablePrefixLen {
-		return ErrKeyTooShort
+		return ErrOutOfRange
 	}
 
 	// keyに含まれるテーブル名とschemaのテーブル名が一致するか検証
 	if schema.Table+"\x00" != string(key[:tablePrefixLen]) {
-		return ErrTableMismatch
+		return ErrOutOfRange
 	}
 
 	key = key[len(schema.Table)+1:]
