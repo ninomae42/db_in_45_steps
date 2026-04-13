@@ -152,3 +152,64 @@ func (iter *KVIterator) Prev() error {
 	}
 	return nil
 }
+
+type RangedKVIter struct {
+	iter KVIterator
+	stop []byte
+	desc bool
+}
+
+func (iter *RangedKVIter) Valid() bool {
+	if !iter.iter.Valid() {
+		return false
+	}
+	r := bytes.Compare(iter.iter.Key(), iter.stop)
+	if iter.desc && r < 0 {
+		return false
+	} else if !iter.desc && r > 0 {
+		return false
+	}
+	return true
+}
+
+func (iter *RangedKVIter) Key() []byte {
+	check(iter.Valid())
+	return iter.iter.Key()
+}
+
+func (iter *RangedKVIter) Val() []byte {
+	check(iter.Valid())
+	return iter.iter.Val()
+}
+
+func (iter *RangedKVIter) Next() error {
+	if !iter.Valid() {
+		return nil
+	}
+	if iter.desc {
+		return iter.iter.Prev()
+	} else {
+		return iter.iter.Next()
+	}
+}
+
+func (kv *KV) Range(start, stop []byte, desc bool) (*RangedKVIter, error) {
+	iter, err := kv.Seek(start)
+	if err != nil {
+		return nil, err
+	}
+	// when descending order, seek(N) points to the element which is greater than or equal to N
+	// given the data [10, 20, 30, 40, 50], and start:25, end:10, seek(25) points to "30" -> but we want to start from 20.
+	// in that case, therefore, we move iterator previous element "20".
+	if desc && (!iter.Valid() || bytes.Compare(iter.Key(), start) > 0) {
+		if err = iter.Prev(); err != nil {
+			return nil, err
+		}
+	}
+
+	return &RangedKVIter{
+		iter: *iter,
+		stop: stop,
+		desc: desc,
+	}, nil
+}

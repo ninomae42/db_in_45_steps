@@ -30,16 +30,30 @@ func (schema *Schema) NewRow() Row {
 	return make(Row, len(schema.Cols))
 }
 
-func (row Row) EncodeKey(schema *Schema) (key []byte) {
-	key = append(key, []byte(schema.Table)...)
-	key = append(key, 0x00)
+func (row Row) EncodeKey(schema *Schema) []byte {
 	check(len(row) == len(schema.Cols))
+	key := append([]byte(schema.Table), 0x00)
 	for _, idx := range schema.PKey {
 		cell := row[idx]
 		check(cell.Type == schema.Cols[idx].Type)
+		key = append(key, byte(cell.Type)) // avoid 0xff
 		key = cell.EncodeKey(key)
 	}
-	return
+	key = append(key, 0x00) // -infinity
+	return key
+}
+
+func EncodeKeyPrefix(schema *Schema, prefix []Cell, positive bool) []byte {
+	key := append([]byte(schema.Table), 0x00)
+	for i, cell := range prefix {
+		check(cell.Type == schema.Cols[schema.PKey[i]].Type)
+		key = append(key, byte(cell.Type)) // avoid 0xff
+		key = cell.EncodeKey(key)
+	}
+	if positive {
+		key = append(key, 0xff) // +infinity
+	} // -infinity
+	return key
 }
 
 func (row Row) EncodeVal(schema *Schema) (val []byte) {
@@ -70,16 +84,18 @@ func (row Row) DecodeKey(schema *Schema, key []byte) (err error) {
 	key = key[len(schema.Table)+1:]
 
 	for _, idx := range schema.PKey {
-		column := schema.Cols[idx]
-		cell := NewCell(column.Type)
+		cell := NewCell(schema.Cols[idx].Type)
+		if !(0 < len(key) && key[0] == byte(cell.Type)) {
+			return errors.New("bad key")
+		}
+		key = key[1:]
 		if key, err = cell.DecodeKey(key); err != nil {
 			return
 		}
 		row[idx] = cell
 	}
-
-	if len(key) != 0 {
-		return ErrExtraData
+	if !(len(key) == 1 && key[0] == 0x00) {
+		return errors.New("bad key")
 	}
 
 	return nil

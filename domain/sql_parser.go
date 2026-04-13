@@ -514,3 +514,12 @@ func (p *Parser) isEnd() bool {
 	p.skipSpaces()
 	return p.pos >= len(p.buf)
 }
+
+type ExprOp uint8
+
+const (
+	OP_LE ExprOp = 12 // <=
+	OP_GE ExprOp = 13 // >=
+	OP_LT ExprOp = 14 // <
+	OP_GT ExprOp = 15 // >
+)

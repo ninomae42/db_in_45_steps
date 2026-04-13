@@ -2,6 +2,7 @@ package domain
 
 import (
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -189,7 +190,9 @@ func TestIterByPKey(t *testing.T) {
 	}
 
 	N := int64(10)
+	sorted := []int64{}
 	for i := int64(0); i < N; i += 2 {
+		sorted = append(sorted, i)
 		row := Row{
 			Cell{Type: TypeI64, I64: i},
 			Cell{Type: TypeI64, I64: i},
@@ -198,27 +201,87 @@ func TestIterByPKey(t *testing.T) {
 		require.True(t, updated && err == nil)
 	}
 
-	for i := int64(-1); i < N+1; i++ {
-		row := Row{
-			Cell{Type: TypeI64, I64: i},
-			Cell{},
-		}
-
-		out := []int64{}
-		iter, err := db.Seek(schema, row)
+	drainIter := func(req *RangeReq) (out []int64) {
+		iter, err := db.Range(schema, req)
 		for ; err == nil && iter.Valid(); err = iter.Next() {
 			out = append(out, iter.Row()[1].I64)
 		}
 		require.Nil(t, err)
-
-		expected := []int64{}
-		for j := i; j < N; j++ {
-			if j >= 0 && j%2 == 0 {
-				expected = append(expected, j)
-			}
-		}
-		assert.Equal(t, expected, out)
+		return
 	}
+	testReq := func(req *RangeReq, i int64, j int64, desc bool) {
+		out := drainIter(req)
+		expected := rangeQuery(sorted, i, j, desc)
+		require.Equal(t, expected, out)
+	}
+
+	for i := int64(-1); i < N+1; i++ {
+		for j := int64(-1); j < N+1; j++ {
+			req := &RangeReq{
+				StartCmp: OP_GE,
+				StopCmp:  OP_LE,
+				Start:    []Cell{{Type: TypeI64, I64: i}},
+				Stop:     []Cell{{Type: TypeI64, I64: j}},
+			}
+			testReq(req, i, j, false)
+
+			req = &RangeReq{
+				StartCmp: OP_LE,
+				StopCmp:  OP_GE,
+				Start:    []Cell{{Type: TypeI64, I64: i}},
+				Stop:     []Cell{{Type: TypeI64, I64: j}},
+			}
+			testReq(req, i, j, true)
+
+			req = &RangeReq{
+				StartCmp: OP_GT,
+				StopCmp:  OP_LT,
+				Start:    []Cell{{Type: TypeI64, I64: i}},
+				Stop:     []Cell{{Type: TypeI64, I64: j}},
+			}
+			testReq(req, i+1, j-1, false)
+
+			req = &RangeReq{
+				StartCmp: OP_LT,
+				StopCmp:  OP_GT,
+				Start:    []Cell{{Type: TypeI64, I64: i}},
+				Stop:     []Cell{{Type: TypeI64, I64: j}},
+			}
+			testReq(req, i-1, j+1, true)
+		}
+	}
+
+	for i := int64(-1); i < N+1; i++ {
+		req := &RangeReq{
+			StartCmp: OP_GE,
+			StopCmp:  OP_LE,
+			Start:    []Cell{{Type: TypeI64, I64: i}},
+			Stop:     nil,
+		}
+		testReq(req, i, N, false)
+
+		req = &RangeReq{
+			StartCmp: OP_LE,
+			StopCmp:  OP_GE,
+			Start:    []Cell{{Type: TypeI64, I64: i}},
+			Stop:     nil,
+		}
+		testReq(req, i, -1, true)
+	}
+}
+
+func rangeQuery(sorted []int64, start int64, stop int64, desc bool) (out []int64) {
+	for _, v := range sorted {
+		if !desc && start <= v && v <= stop {
+			out = append(out, v)
+		} else if desc && stop <= v && v <= start {
+			out = append(out, v)
+		}
+	}
+	if desc {
+		slices.Reverse(out)
+	}
+	return out
 }
 
 // QzBQWVJJOUhU https://trialofcode.org/
