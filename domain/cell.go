@@ -13,6 +13,17 @@ const (
 	TypeStr CellType = 2
 )
 
+func (t CellType) String() string {
+	switch t {
+	case TypeI64:
+		return "TypeI64"
+	case TypeStr:
+		return "TypeStr"
+	default:
+		return "Unknown"
+	}
+}
+
 var ErrIncompleteData = errors.New("expect more data")
 
 type Cell struct {
