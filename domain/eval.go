@@ -33,12 +33,21 @@ func evalExpr(schema *Schema, row Row, expr interface{}) (*Cell, error) {
 
 		out := NewCell(left.Type)
 		switch {
+		// string concat operation
 		case e.op == OP_ADD && out.Type == TypeStr:
 			out.Str = slices.Concat(left.Str, right.Str)
+		// arithmetic operations
 		case e.op == OP_ADD && out.Type == TypeI64:
 			out.I64 = left.I64 + right.I64
 		case e.op == OP_SUB && out.Type == TypeI64:
 			out.I64 = left.I64 - right.I64
+		case e.op == OP_MUL && out.Type == TypeI64:
+			out.I64 = left.I64 * right.I64
+		case e.op == OP_DIV && out.Type == TypeI64:
+			if right.I64 == 0 {
+				return nil, errors.New("division by 0")
+			}
+			out.I64 = left.I64 / right.I64
 		default:
 			return nil, errors.New("bad binary op")
 		}

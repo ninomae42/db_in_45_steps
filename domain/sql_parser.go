@@ -520,6 +520,8 @@ type ExprOp uint8
 const (
 	OP_ADD ExprOp = 1  // +
 	OP_SUB ExprOp = 2  // -
+	OP_MUL ExprOp = 3  // *
+	OP_DIV ExprOp = 4  // /
 	OP_LE  ExprOp = 12 // <=
 	OP_GE  ExprOp = 13 // >=
 	OP_LT  ExprOp = 14 // <
@@ -533,6 +535,16 @@ type ExprBinOp struct {
 }
 
 func (p *Parser) parseAtom() (interface{}, error) {
+	if p.tryPunctuation("(") {
+		expr, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		if !p.tryPunctuation(")") {
+			return nil, errors.New("expect )")
+		}
+		return expr, nil
+	}
 	if name, ok := p.tryName(); ok {
 		return name, nil
 	}
@@ -543,14 +555,20 @@ func (p *Parser) parseAtom() (interface{}, error) {
 	return cell, nil
 }
 
+func (p *Parser) parseExpr() (interface{}, error) {
+	return p.parseAdd()
+}
+
 func (p *Parser) parseAdd() (interface{}, error) {
-	p.skipSpaces()
 	var expr interface{}
 	var err error
+	expr, err = p.parseMul()
+	if err != nil {
+		return nil, err
+	}
 	for !p.isEnd() {
-		p.skipSpaces()
 		if p.tryPunctuation("+") {
-			right, err := p.parseAtom()
+			right, err := p.parseMul()
 			if err != nil {
 				return nil, err
 			}
@@ -560,7 +578,7 @@ func (p *Parser) parseAdd() (interface{}, error) {
 				right: right,
 			}
 		} else if p.tryPunctuation("-") {
-			right, err := p.parseAtom()
+			right, err := p.parseMul()
 			if err != nil {
 				return nil, err
 			}
@@ -570,10 +588,43 @@ func (p *Parser) parseAdd() (interface{}, error) {
 				right: right,
 			}
 		} else {
-			expr, err = p.parseAtom()
+			break
+		}
+	}
+	return expr, nil
+}
+
+func (p *Parser) parseMul() (interface{}, error) {
+	var expr interface{}
+	var err error
+
+	expr, err = p.parseAtom()
+	if err != nil {
+		return nil, err
+	}
+	for !p.isEnd() {
+		if p.tryPunctuation("*") {
+			right, err := p.parseAtom()
 			if err != nil {
 				return nil, err
 			}
+			expr = &ExprBinOp{
+				op:    OP_MUL,
+				left:  expr,
+				right: right,
+			}
+		} else if p.tryPunctuation("/") {
+			right, err := p.parseAtom()
+			if err != nil {
+				return nil, err
+			}
+			expr = &ExprBinOp{
+				op:    OP_DIV,
+				left:  expr,
+				right: right,
+			}
+		} else {
+			break
 		}
 	}
 	return expr, nil
