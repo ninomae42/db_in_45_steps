@@ -34,8 +34,7 @@ func evalExpr(schema *Schema, row Row, expr interface{}) (*Cell, error) {
 		out := NewCell(left.Type)
 		switch {
 		case e.op == OP_ADD && out.Type == TypeStr:
-			out.Str = append(out.Str, left.Str...)
-			out.Str = append(out.Str, right.Str...)
+			out.Str = slices.Concat(left.Str, right.Str)
 		case e.op == OP_ADD && out.Type == TypeI64:
 			out.I64 = left.I64 + right.I64
 		case e.op == OP_SUB && out.Type == TypeI64:
