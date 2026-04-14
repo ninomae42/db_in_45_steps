@@ -543,16 +543,6 @@ func (p *Parser) parseAtom() (interface{}, error) {
 	return cell, nil
 }
 
-// // a
-// "a"
-// // a + b
-// &ExprBinOp{op: OP_ADD, left: "a"
-// , right: "b"}
-// // a + b - 3
-// &ExprBinOp{op: OP_SUB,
-// left: &ExprBinOp{op: OP_ADD, left: "a"
-// right: &Cell{Type: TypeI64, I64: 123}}
-
 func (p *Parser) parseAdd() (interface{}, error) {
 	p.skipSpaces()
 	var expr interface{}
