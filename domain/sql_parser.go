@@ -518,8 +518,73 @@ func (p *Parser) isEnd() bool {
 type ExprOp uint8
 
 const (
-	OP_LE ExprOp = 12 // <=
-	OP_GE ExprOp = 13 // >=
-	OP_LT ExprOp = 14 // <
-	OP_GT ExprOp = 15 // >
+	OP_ADD ExprOp = 1  // +
+	OP_SUB ExprOp = 2  // -
+	OP_LE  ExprOp = 12 // <=
+	OP_GE  ExprOp = 13 // >=
+	OP_LT  ExprOp = 14 // <
+	OP_GT  ExprOp = 15 // >
 )
+
+type ExprBinOp struct {
+	op    ExprOp
+	left  interface{}
+	right interface{}
+}
+
+func (p *Parser) parseAtom() (interface{}, error) {
+	if name, ok := p.tryName(); ok {
+		return name, nil
+	}
+	cell := &Cell{}
+	if err := p.parseValue(cell); err != nil {
+		return nil, err
+	}
+	return cell, nil
+}
+
+// // a
+// "a"
+// // a + b
+// &ExprBinOp{op: OP_ADD, left: "a"
+// , right: "b"}
+// // a + b - 3
+// &ExprBinOp{op: OP_SUB,
+// left: &ExprBinOp{op: OP_ADD, left: "a"
+// right: &Cell{Type: TypeI64, I64: 123}}
+
+func (p *Parser) parseAdd() (interface{}, error) {
+	p.skipSpaces()
+	var expr interface{}
+	var err error
+	for !p.isEnd() {
+		p.skipSpaces()
+		if p.tryPunctuation("+") {
+			right, err := p.parseAtom()
+			if err != nil {
+				return nil, err
+			}
+			expr = &ExprBinOp{
+				op:    OP_ADD,
+				left:  expr,
+				right: right,
+			}
+		} else if p.tryPunctuation("-") {
+			right, err := p.parseAtom()
+			if err != nil {
+				return nil, err
+			}
+			expr = &ExprBinOp{
+				op:    OP_SUB,
+				left:  expr,
+				right: right,
+			}
+		} else {
+			expr, err = p.parseAtom()
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	return expr, nil
+}
