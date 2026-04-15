@@ -52,6 +52,7 @@ func TestEval(t *testing.T) {
 	testEval(t, schema, row, "a + b", makeCell("AB"))
 	testEval(t, schema, row, "c - d", makeCell(-1))
 	testEval(t, schema, row, "c * d - d * c + d", makeCell(4))
+	testEval(t, schema, row, "d or c and not d = c", makeCell(1))
 }
 
 // QzBQWVJJOUhU https://trialofcode.org/

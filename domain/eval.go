@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"bytes"
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
@@ -18,6 +20,22 @@ func evalExpr(schema *Schema, row Row, expr interface{}) (*Cell, error) {
 		return &row[idx], nil
 	case *Cell:
 		return e, nil
+	case *ExprUnOp:
+		kid, err := evalExpr(schema, row, e.kid)
+		if err != nil {
+			return nil, err
+		}
+		if e.op == OP_NEG && kid.Type == TypeI64 {
+			return &Cell{Type: TypeI64, I64: -kid.I64}, nil
+		} else if e.op == OP_NOT && kid.Type == TypeI64 {
+			b := int64(0)
+			if kid.I64 == 0 {
+				b = 1
+			}
+			return &Cell{Type: TypeI64, I64: b}, nil
+		} else {
+			return nil, errors.New("bad unary op")
+		}
 	case *ExprBinOp:
 		left, err := evalExpr(schema, row, e.left)
 		if err != nil {
@@ -32,6 +50,38 @@ func evalExpr(schema *Schema, row Row, expr interface{}) (*Cell, error) {
 		}
 
 		out := NewCell(left.Type)
+		switch e.op {
+		// comparison
+		case OP_EQ, OP_NE, OP_LE, OP_LT, OP_GE, OP_GT:
+			r := 0
+			switch out.Type {
+			case TypeI64:
+				r = cmp.Compare(left.I64, right.I64)
+			case TypeStr:
+				r = bytes.Compare(left.Str, right.Str)
+			default:
+				panic("unreachable")
+			}
+			b := false
+			switch e.op {
+			case OP_EQ:
+				b = (r == 0)
+			case OP_NE:
+				b = (r != 0)
+			case OP_LE:
+				b = (r <= 0)
+			case OP_GE:
+				b = (r >= 0)
+			case OP_LT:
+				b = (r < 0)
+			case OP_GT:
+				b = (r > 0)
+			}
+			if b {
+				out.I64 = 1
+			}
+			return &out, nil
+		}
 		switch {
 		// string concat operation
 		case e.op == OP_ADD && out.Type == TypeStr:
@@ -48,6 +98,15 @@ func evalExpr(schema *Schema, row Row, expr interface{}) (*Cell, error) {
 				return nil, errors.New("division by 0")
 			}
 			out.I64 = left.I64 / right.I64
+		// boolean
+		case e.op == OP_AND && out.Type == TypeI64:
+			if left.I64 != 0 && right.I64 != 0 {
+				out.I64 = 1
+			}
+		case e.op == OP_OR && out.Type == TypeI64:
+			if left.I64 != 0 || right.I64 != 0 {
+				out.I64 = 1
+			}
 		default:
 			return nil, errors.New("bad binary op")
 		}
